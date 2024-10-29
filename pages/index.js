@@ -14,28 +14,39 @@ export default function Home() {
   // Fetch JSON data on mount
   useEffect(() => {
     const fetchData = async () => {
-      const res = await fetch('/recipes.json');
-      const data = await res.json();
-      setRecipes(data);
+      try {
+        const res = await fetch('/recipes.json');
+        const data = await res.json();
+        setRecipes(data);
+        console.log('Fetched recipes:', data);
 
-      // Initialize checkedState and selectedImages from Supabase
-      const { data: dbData, error } = await supabase
-        .from('checked_states')
-        .select('*');
-      
-      if (error) {
-        console.error('Error fetching checked states:', error);
-      } else {
+        // Initialize checkedState and selectedImages from Supabase
+        const { data: dbData, error } = await supabase
+          .from('checked_states')
+          .select('*');
+        
+        if (error) {
+          console.error('Error fetching checked states:', error);
+          return;
+        }
+
+        console.log('Fetched checked_states data:', dbData);
+
         const state = {};
         const selectedImgs = [];
         dbData.forEach((item) => {
           state[item.recipe_name] = item.is_checked;
-          if (item.selected_images) {
-            selectedImgs.push(...item.selected_images);
+          if (item.image_url && Array.isArray(item.image_url)) {
+            selectedImgs.push(...item.image_url);
+            console.log(`Recipe: ${item.recipe_name}, Image URLs:`, item.image_url);
           }
         });
         setCheckedState(state);
         setSelectedImages(selectedImgs);
+        console.log('Initialized checkedState:', state);
+        console.log('Initialized selectedImages:', selectedImgs);
+      } catch (err) {
+        console.error('Error in fetchData:', err);
       }
     };
     fetchData();
@@ -54,19 +65,18 @@ export default function Home() {
         },
         (payload) => {
           const { eventType, new: newRow, old: oldRow } = payload;
+          console.log('Real-time payload:', payload);
           if (eventType === 'INSERT' || eventType === 'UPDATE') {
             setCheckedState((prev) => ({
               ...prev,
               [newRow.recipe_name]: newRow.is_checked,
             }));
+            console.log(`Updated checkedState for ${newRow.recipe_name}:`, newRow.is_checked);
             
-            // Update selected images
-            setSelectedImages((prev) => {
-              const otherRecipeImages = prev.filter(img => 
-                !recipes[newRow.recipe_name]?.images.includes(img)
-              );
-              return [...otherRecipeImages, ...(newRow.selected_images || [])];
-            });
+            if (newRow.image_url && Array.isArray(newRow.image_url)) {
+              setSelectedImages(newRow.image_url);
+              console.log('Updated selectedImages:', newRow.image_url);
+            }
           } else if (eventType === 'DELETE') {
             setCheckedState((prev) => {
               const updated = { ...prev };
@@ -75,72 +85,86 @@ export default function Home() {
             });
             // Remove deleted recipe's images from selection
             setSelectedImages((prev) => 
-              prev.filter(img => !recipes[oldRow.recipe_name]?.images.includes(img))
+              prev.filter(img => !recipes[oldRow.recipe_name]?.images.some(recipeImg => recipeImg.url === img))
             );
+            console.log('CheckedState and selectedImages updated after DELETE');
           }
         }
       )
       .subscribe();
-
+  
     return () => {
       supabase.channel('checked_states_changes').unsubscribe();
     };
-  }, [recipes]); // Added recipes as dependency
+  }, [recipes]);
 
-  // Modified handleImageSelect to update Supabase
-  const handleImageSelect = async (selectedImages) => {
-    setSelectedImages(selectedImages);
+  // Handle image selection and update Supabase
+  const handleImageSelect = async (selectedImagesArray) => {
+    setSelectedImages(selectedImagesArray);
+    console.log('handleImageSelect called with:', selectedImagesArray);
     
-    // Get the current recipe name from selectedRecipe
     if (selectedRecipe) {
-      const recipeName = Object.entries(recipes).find(
+      const recipeNameEntry = Object.entries(recipes).find(
         ([_, recipe]) => recipe === selectedRecipe
-      )?.[0];
-
+      );
+      const recipeName = recipeNameEntry ? recipeNameEntry[0] : null;
+  
       if (recipeName) {
-        const { error } = await supabase
+        // Ensure selectedImages is an array of URLs
+        const imageUrls = selectedImagesArray;
+  
+        console.log('Submitting to Supabase for recipe:', recipeName, ' with images:', imageUrls);
+  
+        const { data, error } = await supabase
           .from('checked_states')
           .upsert(
             { 
               recipe_name: recipeName,
               is_checked: true,
-              selected_images: selectedImages.filter(img => 
-                selectedRecipe.images.includes(img)
-              )
+              selected_images: imageUrls, // Use only 'selected_images'
             },
             { onConflict: 'recipe_name' }
-          );
-
+          )
+          .select();
+  
         if (error) {
           console.error('Error updating selected images:', error);
+        } else {
+          console.log('Selected images updated successfully:', data);
         }
       }
     }
   };
 
-  // Modified handleModalClose to handle selected images properly
+  // Handle modal close and update Supabase
   const handleModalClose = async () => {
+    console.log('handleModalClose called');
     if (selectedRecipe) {
-      const recipeName = Object.entries(recipes).find(
+      const recipeNameEntry = Object.entries(recipes).find(
         ([_, recipe]) => recipe === selectedRecipe
-      )?.[0];
+      );
+      const recipeName = recipeNameEntry ? recipeNameEntry[0] : null;
 
       if (recipeName) {
-        const { error } = await supabase
+        const imageUrls = selectedImages;
+        console.log('Submitting onModalClose to Supabase for recipe:', recipeName, ' with images:', imageUrls);
+
+        const { data, error } = await supabase
           .from('checked_states')
           .upsert(
             { 
               recipe_name: recipeName,
               is_checked: checkedState[recipeName],
-              selected_images: selectedImages.filter(img => 
-                selectedRecipe.images.includes(img)
-              )
+              selected_images: imageUrls, // Use only 'selected_images'
             },
             { onConflict: 'recipe_name' }
-          );
+          )
+          .select();
 
         if (error) {
           console.error('Error saving modal state:', error);
+        } else {
+          console.log('Modal state saved successfully:', data);
         }
       }
     }
@@ -149,46 +173,62 @@ export default function Home() {
 
   // Handle checkbox change
   const handleCheck = async (recipeName, isChecked) => {
+    console.log(`handleCheck called for ${recipeName} with isChecked=${isChecked}`);
     setCheckedState((prev) => ({ ...prev, [recipeName]: isChecked }));
 
     // Update selected images based on checkbox state
     setSelectedImages((prev) => {
+      let updatedImages = [...prev];
       if (isChecked) {
-        return [...prev, recipeName]; // Add to selected images
+        // Add images
+        const imagesToAdd = recipes[recipeName]?.images.map(img => img.url) || [];
+        imagesToAdd.forEach(url => {
+          if (!updatedImages.includes(url)) {
+            updatedImages.push(url);
+          }
+        });
       } else {
-        return prev.filter((name) => name !== recipeName); // Remove from selected images
+        // Remove images
+        const imagesToRemove = recipes[recipeName]?.images.map(img => img.url) || [];
+        updatedImages = updatedImages.filter(url => !imagesToRemove.includes(url));
       }
+      console.log('Updated selectedImages after handleCheck:', updatedImages);
+      return updatedImages;
     });
 
     // Upsert the checked state in Supabase
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('checked_states')
       .upsert(
         { recipe_name: recipeName, is_checked: isChecked },
         { onConflict: 'recipe_name' }
-      );
+      )
+      .select();
 
     if (error) {
       console.error('Error updating checked state:', error);
+    } else {
+      console.log('Checked state updated successfully for', recipeName, ':', data);
     }
   };
 
   // Handle export
   const handleExport = () => {
+    console.log('handleExport called');
     // Only get recipes that have their tiles checked
     const selectedRecipeNames = Object.entries(checkedState)
       .filter(([_, isChecked]) => isChecked)
       .map(([recipeName]) => recipeName);
-
+  
     const selectedRecipes = selectedRecipeNames.reduce((obj, recipeName) => {
       // Only proceed if this recipe is actually selected (tile is checked)
       if (checkedState[recipeName]) {
         // Create a copy of the recipe
         const recipe = { ...recipes[recipeName] };
-        // Get the selected images for this recipe from Supabase state
+        // Get the selected images for this recipe from selectedImages state
         if (recipe && recipe.images) {
           // Only include images that are in the selectedImages array
-          recipe.images = recipe.images.filter(img => selectedImages.includes(img));
+          recipe.images = recipe.images.filter(img => selectedImages.includes(img.url));
           // Only include the recipe if it has selected images
           if (recipe.images.length > 0) {
             obj[recipeName] = recipe;
@@ -197,7 +237,7 @@ export default function Home() {
       }
       return obj;
     }, {});
-
+  
     const blob = new Blob([JSON.stringify(selectedRecipes, null, 2)], {
       type: 'application/json',
     });
@@ -207,6 +247,7 @@ export default function Home() {
     link.download = 'selected_recipes.json';
     link.click();
     URL.revokeObjectURL(url);
+    console.log('Exported selected recipes');
   };
 
   return (
