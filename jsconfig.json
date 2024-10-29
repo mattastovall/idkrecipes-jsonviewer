@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",        // Sets the base directory to the root of the project
+    "paths": {
+      "@/*": ["src/*"]     // Maps the '@' alias to the 'src' directory
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],  // Ensures TypeScript files are included (optional)
+  "exclude": ["node_modules"]                           // Excludes the node_modules directory
+}
