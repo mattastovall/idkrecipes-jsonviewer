@@ -181,41 +181,57 @@ export default function Home() {
   };
 
   // Handle export
-  const handleExport = () => {
+  const handleExport = async () => {
     console.log('handleExport called');
-    // Only get recipes that have their tiles checked
-    const selectedRecipeNames = Object.entries(checkedState)
-      .filter(([_, isChecked]) => isChecked)
-      .map(([recipeName]) => recipeName);
-  
-    const selectedRecipes = selectedRecipeNames.reduce((obj, recipeName) => {
-      // Only proceed if this recipe is actually selected (tile is checked)
-      if (checkedState[recipeName]) {
-        // Create a copy of the recipe
-        const recipe = { ...recipes[recipeName] };
-        // Get the selected images for this recipe from selectedImages state
-        if (recipe && recipe.images) {
-          // Only include images that are in the selectedImages array
-          recipe.images = recipe.images.filter(img => selectedImages.includes(img.url));
-          // Only include the recipe if it has selected images
-          if (recipe.images.length > 0) {
-            obj[recipeName] = recipe;
+
+    try {
+      const { data: dbData, error } = await supabase
+        .from('checked_states')
+        .select('recipe_name, is_checked, selected_images');
+
+      if (error) {
+        console.error('Error fetching data from database:', error);
+        return;
+      }
+
+      const selectedRecipes = {};
+      
+      dbData.forEach(item => {
+        if (item.is_checked && recipes[item.recipe_name]) {
+          const recipe = recipes[item.recipe_name];
+          
+          // Add the recipe with the selected images from the database
+          if (Array.isArray(item.selected_images) && item.selected_images.length > 0) {
+            selectedRecipes[item.recipe_name] = {
+              ...recipe,
+              images: item.selected_images.map(url => ({ url }))
+            };
+            console.log(`Added recipe ${item.recipe_name} with ${item.selected_images.length} selected images`);
           }
         }
+      });
+
+      console.log('Selected recipes for export:', selectedRecipes);
+
+      if (Object.keys(selectedRecipes).length === 0) {
+        console.warn('No recipes selected for export.');
+        return;
       }
-      return obj;
-    }, {});
-  
-    const blob = new Blob([JSON.stringify(selectedRecipes, null, 2)], {
-      type: 'application/json',
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'selected_recipes.json';
-    link.click();
-    URL.revokeObjectURL(url);
-    console.log('Exported selected recipes');
+
+      // Create and download the JSON file
+      const blob = new Blob([JSON.stringify(selectedRecipes, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'selected_recipes.json';
+      link.click();
+      URL.revokeObjectURL(url);
+      console.log('Exported selected recipes');
+    } catch (err) {
+      console.error('Error during export:', err);
+    }
   };
 
   return (
