@@ -20,10 +20,10 @@ export default function Home() {
         setRecipes(data);
         console.log('Fetched recipes:', data);
 
-        // Initialize checkedState and selectedImages from Supabase
+        // Fetch initial checked states and selected images from Supabase
         const { data: dbData, error } = await supabase
           .from('checked_states')
-          .select('*');
+          .select('recipe_name, selected_images');
         
         if (error) {
           console.error('Error fetching checked states:', error);
@@ -35,10 +35,10 @@ export default function Home() {
         const state = {};
         const selectedImgs = [];
         dbData.forEach((item) => {
-          state[item.recipe_name] = item.is_checked;
-          if (item.image_url && Array.isArray(item.image_url)) {
-            selectedImgs.push(...item.image_url);
-            console.log(`Recipe: ${item.recipe_name}, Image URLs:`, item.image_url);
+          state[item.recipe_name] = true; // Assuming all fetched recipes are checked
+          if (item.selected_images && Array.isArray(item.selected_images)) {
+            selectedImgs.push(...item.selected_images);
+            console.log(`Recipe: ${item.recipe_name}, Image URLs:`, item.selected_images);
           }
         });
         setCheckedState(state);
@@ -71,11 +71,9 @@ export default function Home() {
               ...prev,
               [newRow.recipe_name]: newRow.is_checked,
             }));
-            console.log(`Updated checkedState for ${newRow.recipe_name}:`, newRow.is_checked);
-            
-            if (newRow.image_url && Array.isArray(newRow.image_url)) {
-              setSelectedImages(newRow.image_url);
-              console.log('Updated selectedImages:', newRow.image_url);
+            if (newRow.selected_images && Array.isArray(newRow.selected_images)) {
+              setSelectedImages(newRow.selected_images);
+              console.log('Updated selectedImages:', newRow.selected_images);
             }
           } else if (eventType === 'DELETE') {
             setCheckedState((prev) => {
@@ -110,7 +108,6 @@ export default function Home() {
       const recipeName = recipeNameEntry ? recipeNameEntry[0] : null;
   
       if (recipeName) {
-        // Ensure selectedImages is an array of URLs
         const imageUrls = selectedImagesArray;
   
         console.log('Submitting to Supabase for recipe:', recipeName, ' with images:', imageUrls);
@@ -121,7 +118,7 @@ export default function Home() {
             { 
               recipe_name: recipeName,
               is_checked: true,
-              selected_images: imageUrls, // Use only 'selected_images'
+              selected_images: imageUrls,
             },
             { onConflict: 'recipe_name' }
           )
@@ -135,43 +132,12 @@ export default function Home() {
       }
     }
   };
-  
 
   // Handle modal close and update Supabase
-  const handleModalClose = async () => {
+  const handleModalClose = () => {
     console.log('handleModalClose called');
-    if (selectedRecipe) {
-      const recipeNameEntry = Object.entries(recipes).find(
-        ([_, recipe]) => recipe === selectedRecipe
-      );
-      const recipeName = recipeNameEntry ? recipeNameEntry[0] : null;
-  
-      if (recipeName) {
-        const imageUrls = selectedImages;
-        console.log('Submitting onModalClose to Supabase for recipe:', recipeName, ' with images:', imageUrls);
-  
-        const { data, error } = await supabase
-          .from('checked_states')
-          .upsert(
-            { 
-              recipe_name: recipeName,
-              is_checked: checkedState[recipeName],
-              selected_images: imageUrls, // Use only 'selected_images'
-            },
-            { onConflict: 'recipe_name' }
-          )
-          .select();
-  
-        if (error) {
-          console.error('Error saving modal state:', error);
-        } else {
-          console.log('Modal state saved successfully:', data);
-        }
-      }
-    }
     setSelectedRecipe(null);
   };
-  
 
   // Handle checkbox change
   const handleCheck = async (recipeName, isChecked) => {
