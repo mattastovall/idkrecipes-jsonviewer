@@ -42,7 +42,10 @@ const Modal = ({ isOpen, onClose, recipe, selectedImages = [], onImageSelect = (
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <button className={styles.closeButton} onClick={onClose}>
+        <button className={styles.closeButton} onClick={() => {
+          console.log('Close button clicked');
+          onClose();
+        }}>
           ×
         </button>
         <h2 className={styles.title}>{recipe.title}</h2>
