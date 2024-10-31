@@ -39,6 +39,10 @@ const Modal = ({ isOpen, onClose, recipe, selectedImages = [], onImageSelect = (
 
   if (!isOpen || !recipe) return null;
 
+  const renderDifficulty = (level) => {
+    return '★'.repeat(level);
+  };
+
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
@@ -46,9 +50,9 @@ const Modal = ({ isOpen, onClose, recipe, selectedImages = [], onImageSelect = (
           console.log('Close button clicked');
           onClose();
         }}>
-          ×
+          &times;
         </button>
-        <h2 className={styles.title}>{recipe.title}</h2>
+        <h2 className={styles.title}>{recipe.title} ({recipe.id})</h2>
         
         <div className={styles.imageGrid}>
           {recipe.images && recipe.images.length > 0 ? (
@@ -77,9 +81,15 @@ const Modal = ({ isOpen, onClose, recipe, selectedImages = [], onImageSelect = (
         </div>
 
         <div className={styles.section}>
+          <p><strong>Difficulty:</strong> {renderDifficulty(recipe.difficulty)}</p>
           <p><strong>Nationality:</strong> {recipe.nationality}</p>
+          <p><strong>Breakfast:</strong> {recipe.breakfast ? 'Yes' : 'No'}</p>
+          <p><strong>Dessert:</strong> {recipe.dessert ? 'Yes' : 'No'}</p>
+          <p><strong>Special:</strong> {recipe.special}</p>
           <p><strong>Vegan:</strong> {recipe.vegan ? 'Yes' : 'No'}</p>
           <p><strong>Description:</strong> {recipe.description}</p>
+          <p><strong>Total Cook Time:</strong> {recipe.total_cook_time}</p>
+          <p><strong>Serving Size:</strong> {recipe.serving_size}</p>
         </div>
 
         <div className={styles.section}>
@@ -88,7 +98,7 @@ const Modal = ({ isOpen, onClose, recipe, selectedImages = [], onImageSelect = (
             {recipe.ingredients.map((ing, idx) => (
               <li key={idx}>
                 {ing.quantity} {ing.unit} {ing.name} (
-                {ing.metric.quantity} {ing.metric.unit})
+                {ing.metric.quantity !== null ? `${ing.metric.quantity} ${ing.metric.unit}` : 'N/A'})
               </li>
             ))}
           </ul>
